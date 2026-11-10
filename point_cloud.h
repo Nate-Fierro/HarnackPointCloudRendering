@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <iostream>
+#include <unordered_set>
 
 #include <cyPointCloud.h>
 #include <Eigen/SVD>
@@ -82,15 +83,20 @@ class CustomPtCloud : protected PtCloud3f {
 	std::vector<float> area;
 
 	// Incomplete
-	void ApproxAreas() {
+	bool ApproxAreas() {
 		const uint K = 20;
 
 		for (uint i = 0; i < uint(pos.size()); ++i) {
 			PointInfo pts[K];
 			uint count = GetPoints(i, K, pts);
 
+			uint target = 0;
+
 			Vec3f avg(0.0f);
-			for (uint j = 0; j < count; ++j) { avg += pts[j].pos; }
+			for (uint j = 0; j < count; ++j) { 
+				avg += pts[j].pos; 
+				if (pts[j].index == i) { target = j; }
+			}
 			avg /= count;
 
 			Eigen::Matrix<float, K, 3> mat;
@@ -118,7 +124,38 @@ class CustomPtCloud : protected PtCloud3f {
 
 			triangulate(cmd, &in, &out, &vorout);
 
-			// Now just need to compute voronoi cell area
+			// TODO: Finish computing voronoi cell area
+
+			std::vector<Vec2f> verts; // cell vertices
+			std::unordered_set<uint> vertSet;
+
+			for (uint j = 0; j < vorout.numberofedges; ++j) {
+				uint e = j * 2;
+
+				uint vorPt1 = vorout.edgelist[e];
+				uint vorPt2 = out.edgelist[e + 1];
+
+				uint triPt1 = out.edgelist[e];
+				uint triPt2 = out.edgelist[e + 1];
+
+				if (triPt1 != target && triPt2 != target) { continue; }
+
+				if (vorPt1 == -1) {
+					// edge extends to infinity so intersect with a bounding box
+				}
+				else if (!vertSet.count(vorPt1)) {
+					vertSet.insert(vorPt1);
+					verts.emplace_back(vorout.pointlist + (vorPt1 * 2));
+				}
+
+				if (vorPt2 == -1) {
+					// edge extends to infinity so intersect with a bounding box
+				}
+				else if (!vertSet.count(vorPt2)) {
+					vertSet.insert(vorPt2);
+					verts.emplace_back(vorout.pointlist + (vorPt2 * 2));
+				}
+			}
 
 			Free(out); Free(vorout);
 		}
