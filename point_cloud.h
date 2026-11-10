@@ -73,7 +73,7 @@ void Free(triangulateio& io) {
 	if (io.normlist)				trifree(io.normlist);
 }
 
-inline Vec3f toCyVec(const Eigen::Ref<Eigen::Vector3f>& in) { return Vec3f(in.data()); }
+inline Vec3f toCyVec(const Eigen::Ref<const Eigen::Vector3f>& in) { return Vec3f(in.data()); }
 
 typedef cy::PointCloud<Vec3f, float, 3u> PtCloud3f;
 class CustomPtCloud : protected PtCloud3f {
@@ -83,28 +83,27 @@ class CustomPtCloud : protected PtCloud3f {
 
 	// Incomplete
 	void ApproxAreas() {
-		const uint k = 20;
+		const uint K = 20;
 
 		for (uint i = 0; i < uint(pos.size()); ++i) {
-			PointInfo pts[k];
-			uint count = GetPoints(i, k, pts);
+			PointInfo pts[K];
+			uint count = GetPoints(i, K, pts);
 
 			Vec3f avg(0.0f);
 			for (uint j = 0; j < count; ++j) { avg += pts[j].pos; }
 			avg /= count;
 
-			Eigen::Matrix<float, 3, k> mat;
+			Eigen::Matrix<float, K, 3> mat;
 			for (uint j = 0; j < count; ++j) {
-				uint colStart = j * 3;
 				for (uint k = 0; k < 3; ++k) {
-					mat[colStart + k] = pts[j].pos[k] - avg[k];
+					mat(j, k) = pts[j].pos[k] - avg[k];
 				}
 			}
 
-			Eigen::JacobiSVD<Eigen::Matrix<float, 3, k>> svd(mat.leftCols(count), Eigen::ComputeFullV);
+			Eigen::JacobiSVD<Eigen::Matrix<float, K, 3>> svd(mat.leftCols(count), Eigen::ComputeFullV);
 			Vec3f fit = toCyVec(svd.matrixV().col(count - 1));
 
-			Vec2f pts2D[k];
+			Vec2f pts2D[K];
 			for (uint j = 0; j < count; ++j) {
 				pts2D[j] = projectToLocalPlane(pts[j].pos, fit);
 			}
