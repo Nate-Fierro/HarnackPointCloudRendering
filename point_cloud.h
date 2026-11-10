@@ -17,10 +17,6 @@ extern "C" {
 	#include "triangle.h"
 }
 
-//extern "C" void triangulate(char*, struct triangulateio*, struct triangulateio*, 
-//	struct triangulateio*);
-//extern "C" void trifree(void* ptr);
-
 void Init(triangulateio& io) {
 	io.pointlist = nullptr;
 	io.pointattributelist = nullptr;
@@ -74,16 +70,53 @@ void Free(triangulateio& io) {
 	if (io.normlist)				trifree(io.normlist);
 }
 
+struct AABB2D {
+	Vec2f min = Vec2f(std::numeric_limits<float>::infinity());
+	Vec2f max = Vec2f(0.0f);
+};
+
+struct Ray2D {
+	Vec2f p;
+	Vec2f d;
+};
+
+struct Hit2D {
+	Vec2f p;
+	float t;
+};
+
+bool Intersect(const Ray2D& ray, const AABB2D& aabb, float& t) {
+	Vec2f tMin, tMax;
+	tMin = (aabb.min - ray.p) / ray.d;
+	tMax = (aabb.max - ray.p) / ray.d;
+
+	if (tMin.y > tMax.y) { std::swap(tMin.y, tMax.y); }
+	if (tMin.x > tMax.x) { std::swap(tMin.x, tMax.x); }
+
+	float t1 = tMin.Max();
+	float t2 = tMax.Min();
+
+	if (t1 > t2 || t2 < 0.0f) { return false; }
+
+	if (t1 >= 0.0f) { 
+		if (t1 < t) { t = t1; return true; }
+	}
+	else if (t2 < t) { t = t2; return true; }
+
+	return false;
+}
+
 inline Vec3f toCyVec(const Eigen::Ref<const Eigen::Vector3f>& in) { return Vec3f(in.data()); }
 
 typedef cy::PointCloud<Vec3f, float, 3u> PtCloud3f;
+
 class CustomPtCloud : protected PtCloud3f {
 	std::vector<Vec3f> pos;
 	std::vector<Vec3f> norm;
 	std::vector<float> area;
 
 	// Incomplete
-	bool ApproxAreas() {
+	void ApproxAreas() {
 		const uint K = 20;
 
 		for (uint i = 0; i < uint(pos.size()); ++i) {
@@ -108,6 +141,7 @@ class CustomPtCloud : protected PtCloud3f {
 
 			Eigen::JacobiSVD<Eigen::Matrix<float, K, 3>> svd(mat.leftCols(count), Eigen::ComputeFullV);
 			Vec3f fit = toCyVec(svd.matrixV().col(count - 1));
+			fit.Normalize();
 
 			Vec2f pts2D[K];
 			for (uint j = 0; j < count; ++j) {
@@ -121,10 +155,20 @@ class CustomPtCloud : protected PtCloud3f {
 			in.pointlist = &pts2D->x;
 
 			char cmd[] = "zevQ";
-
 			triangulate(cmd, &in, &out, &vorout);
 
-			// TODO: Finish computing voronoi cell area
+			AABB2D box;
+			for (uint j = 0; j < count; ++j) {
+				const Vec2f& pt = pts2D[j];
+				if (pt.x < box.min.x) { box.min.x = pt.x; }
+				if (pt.x > box.max.x) { box.max.x = pt.x; }
+				if (pt.y < box.min.y) { box.min.y = pt.y; }
+				if (pt.y > box.max.y) { box.max.y = pt.y; }
+			}
+
+			const float MARGIN(0.5f);
+			box.min -= MARGIN;
+			box.max += MARGIN;
 
 			std::vector<Vec2f> verts; // cell vertices
 			std::unordered_set<uint> vertSet;
@@ -142,6 +186,16 @@ class CustomPtCloud : protected PtCloud3f {
 
 				if (vorPt1 == -1) {
 					// edge extends to infinity so intersect with a bounding box
+
+					Ray2D ray;
+					ray.d = Vec2f(vorout.normlist + e);
+					ray.p = Vec2f(vorout.pointlist + (vorPt2 * 2));
+
+					float t = std::numeric_limits<float>::infinity();
+					Intersect(ray, box, t); // will be true since ray.p is inside box
+
+					Vec2f hitPt = ray.p + (t * ray.d);
+					verts.push_back(hitPt);
 				}
 				else if (!vertSet.count(vorPt1)) {
 					vertSet.insert(vorPt1);
@@ -150,12 +204,24 @@ class CustomPtCloud : protected PtCloud3f {
 
 				if (vorPt2 == -1) {
 					// edge extends to infinity so intersect with a bounding box
+
+					Ray2D ray;
+					ray.d = Vec2f(vorout.normlist + e);
+					ray.p = Vec2f(vorout.pointlist + (vorPt1 * 2));
+
+					float t = std::numeric_limits<float>::infinity();
+					Intersect(ray, box, t); // will be true since ray.p is inside box
+
+					Vec2f hitPt = ray.p + (t * ray.d);
+					verts.push_back(hitPt);
 				}
 				else if (!vertSet.count(vorPt2)) {
 					vertSet.insert(vorPt2);
 					verts.emplace_back(vorout.pointlist + (vorPt2 * 2));
 				}
 			}
+
+			// TODO: Compute Area of Voronoi Cell
 
 			Free(out); Free(vorout);
 		}
