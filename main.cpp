@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
 		ptCloud.emplace_back();
 		ptCloud.back().pos = ptCldIO.Positions()[i];
 		ptCloud.back().norm = ptCldIO.Normals()[i];
-		ptCloud.back().area = 0.01f;
+		ptCloud.back().area = ptCldIO.Areas()[i];
 	}
 
 	// TODO: Center point cloud on origin

@@ -4,6 +4,8 @@
 #include <vector>
 #include <iostream>
 #include <unordered_set>
+#include <algorithm>
+#include <utility>
 
 #include <cyPointCloud.h>
 #include <Eigen/SVD>
@@ -11,6 +13,7 @@
 #include "helper.h"
 
 extern "C" {
+	#define SINGLE
 	#define REAL float
 	#define TRILIBRARY
 	#define ANSI_DECLARATORS
@@ -106,6 +109,23 @@ bool Intersect(const Ray2D& ray, const AABB2D& aabb, float& t) {
 	return false;
 }
 
+float PolygonAreaCCW(const std::vector<std::pair<float,Vec2f>>& polygon) {
+	if (polygon.size() < 3) { return 0.0f; }
+
+	float area = 0.0f;
+
+	Vec2f prev = polygon[0].second;
+	for (size_t i = 1; i < polygon.size(); ++i) {
+		const Vec2f& curr = polygon[i].second;
+		area += prev.x * curr.y;
+		area -= prev.y * curr.x;
+
+		prev = curr;
+	}
+
+	return area / 2.0f;
+}
+
 inline Vec3f toCyVec(const Eigen::Ref<const Eigen::Vector3f>& in) { return Vec3f(in.data()); }
 
 typedef cy::PointCloud<Vec3f, float, 3u> PtCloud3f;
@@ -139,8 +159,8 @@ class CustomPtCloud : protected PtCloud3f {
 				}
 			}
 
-			Eigen::JacobiSVD<Eigen::Matrix<float, K, 3>> svd(mat.leftCols(count), Eigen::ComputeFullV);
-			Vec3f fit = toCyVec(svd.matrixV().col(count - 1));
+			Eigen::JacobiSVD<Eigen::Matrix<float, K, 3>> svd(mat.topRows(count), Eigen::ComputeFullV);
+			Vec3f fit = toCyVec(svd.matrixV().col(2));
 			fit.Normalize();
 
 			Vec2f pts2D[K];
@@ -170,7 +190,7 @@ class CustomPtCloud : protected PtCloud3f {
 			box.min -= MARGIN;
 			box.max += MARGIN;
 
-			std::vector<Vec2f> verts; // cell vertices
+			std::vector<std::pair<float, Vec2f>> verts; // cell vertices
 			std::unordered_set<uint> vertSet;
 
 			for (uint j = 0; j < vorout.numberofedges; ++j) {
@@ -195,11 +215,14 @@ class CustomPtCloud : protected PtCloud3f {
 					Intersect(ray, box, t); // will be true since ray.p is inside box
 
 					Vec2f hitPt = ray.p + (t * ray.d);
-					verts.push_back(hitPt);
+					hitPt -= pts2D[target];
+					verts.push_back({ std::atan2(hitPt.y, hitPt.x), hitPt });
 				}
 				else if (!vertSet.count(vorPt1)) {
 					vertSet.insert(vorPt1);
-					verts.emplace_back(vorout.pointlist + (vorPt1 * 2));
+					Vec2f vert(vorout.pointlist + (vorPt1 * 2));
+					vert -= pts2D[target];
+					verts.push_back({ std::atan2(vert.y, vert.x), vert });
 				}
 
 				if (vorPt2 == -1) {
@@ -213,15 +236,25 @@ class CustomPtCloud : protected PtCloud3f {
 					Intersect(ray, box, t); // will be true since ray.p is inside box
 
 					Vec2f hitPt = ray.p + (t * ray.d);
-					verts.push_back(hitPt);
+					hitPt -= pts2D[target];
+					verts.push_back({ std::atan2(hitPt.y, hitPt.x), hitPt });
 				}
 				else if (!vertSet.count(vorPt2)) {
 					vertSet.insert(vorPt2);
-					verts.emplace_back(vorout.pointlist + (vorPt2 * 2));
+					Vec2f vert(vorout.pointlist + (vorPt2 * 2));
+					vert -= pts2D[target];
+					verts.push_back({ std::atan2(vert.y, vert.x), vert });
 				}
 			}
 
-			// TODO: Compute Area of Voronoi Cell
+			struct Comp {
+				bool operator()(const std::pair<float, Vec2f>& left, const std::pair<float, Vec2f>& right) {
+					return left.first < right.first;
+				}
+			};
+
+			std::sort(verts.begin(), verts.end(), Comp());
+			area.push_back(PolygonAreaCCW(verts));
 
 			Free(out); Free(vorout);
 		}
@@ -365,7 +398,7 @@ public:
 
 		PtCloud3f::Build(uint32_t(pos.size()), pos.data());
 
-		// ApproxAreas();
+		ApproxAreas();
 
 		return true;
 	}
