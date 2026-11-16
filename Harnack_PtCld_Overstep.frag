@@ -9,12 +9,11 @@ uniform uvec2 res;
 uniform float fov;
 uniform Camera cam;
 
-const float INV_FOUR_PI = 0.07957747154594767;
 const float ISO_VALUE = 0.5;
 const float FIELD_EPSILON = 0.0001;
 const float SOURCE_EPSILON = 0.00001;
 
-// f = |iso - winding|. c is a lower bound on the same signed branch in
+// f = |iso - dipole potential|. c is a lower bound on the same signed branch in
 // the ball B(x,r).
 float DipolePotential(vec3 x, out float r, out float c, out float minDist) {
     float minDistSquared = 1e30;
@@ -41,8 +40,8 @@ float DipolePotential(vec3 x, out float r, out float c, out float minDist) {
         lower += pt.a * lowerNumerator / (lowerDenominator * lowerDenominator * lowerDenominator);
         upper += pt.a * upperNumerator / (upperDenominator * upperDenominator * upperDenominator);
     }
-    float value = ISO_VALUE - INV_FOUR_PI * winding;
-    c = value >= 0.0 ? ISO_VALUE - INV_FOUR_PI * upper : INV_FOUR_PI * lower - ISO_VALUE;
+    float value = ISO_VALUE - winding;
+    c = value >= 0.0 ? ISO_VALUE - upper : lower - ISO_VALUE;
     c -= 0.000001;
     return abs(value);
 }
@@ -61,7 +60,7 @@ float SignedField(vec3 x) {
         float dist = length(d);
         winding += ptCld[i].a * dot(d, ptCld[i].n) / max(dist * dist * dist, 1e-30);
     }
-    return ISO_VALUE - INV_FOUR_PI * winding;
+    return ISO_VALUE - winding;
 }
 
 float RefineStalledRay(Ray ray, float t) {

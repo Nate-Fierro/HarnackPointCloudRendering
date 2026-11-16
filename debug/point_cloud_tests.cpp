@@ -9,14 +9,14 @@ void Check(bool value, const char* message) {
     if (!value) throw std::runtime_error(message);
 }
 
-double Winding(const CustomPtCloud& cloud, const Vec3f& x) {
+double DipolePotential(const CustomPtCloud& cloud, const Vec3f& x) {
     double sum = 0.;
     for (size_t i = 0; i < cloud.Positions().size(); ++i) {
         const Vec3f d = cloud.Positions()[i] - x;
         const double length = d.Length();
         sum += cloud.Areas()[i] * d.Dot(cloud.Normals()[i]) / (length * length * length);
     }
-    return sum / (4. * cy::Pi<double>());
+    return sum;
 }
 
 int main(int argc, char** argv) {
@@ -31,8 +31,10 @@ int main(int argc, char** argv) {
         Check(sphere.LoadFromFileObj(spherePath.string().c_str()), "Sphere must load");
         const double totalArea = std::accumulate(sphere.Areas().begin(), sphere.Areas().end(), 0.);
         Check(std::abs(totalArea - 4 * cy::Pi<double>()) < 0.5, "Unit sphere quadrature area should approximate 4 pi");
-        Check(std::abs(Winding(sphere, Vec3f(0.f)) - 1.) < 0.04, "Inside sphere winding should be 1");
-        Check(std::abs(Winding(sphere, Vec3f(3.f, 0.f, 0.f))) < 0.01, "Outside sphere winding should be 0");
+        Check(std::abs(DipolePotential(sphere, Vec3f(0.f)) - 4 * cy::Pi<double>()) < 0.5,
+              "Inside sphere dipole potential should be 4 pi");
+        Check(std::abs(DipolePotential(sphere, Vec3f(3.f, 0.f, 0.f))) < 0.125,
+              "Outside sphere dipole potential should be 0");
         for (float a : sphere.Areas()) Check(std::isfinite(a) && a > 0.f, "Point areas must be positive and finite");
 
         const auto fixture = std::filesystem::current_path() / "point-cloud-test-input.obj";
@@ -64,11 +66,11 @@ int main(int argc, char** argv) {
         Check(bunny.HasPrecomputedAreas(), "Bundled bunny must use its precomputed mesh areas");
         Check(std::abs(std::accumulate(bunny.Areas().begin(),bunny.Areas().end(),0.)-.057128783477919554)<1e-8,
               "Bunny weights must conserve the source mesh's surface area");
-        const double beforeWinding = Winding(bunny, Vec3f(10.f));
+        const double beforePotential = DipolePotential(bunny, Vec3f(10.f));
         bunny.Normalize();
         for (const auto& p : bunny.Positions()) Check(p.Length() <= 1.00001f, "Normalized cloud must fit unit sphere");
         std::cout << "All point-cloud regressions passed; sphere area=" << totalArea
-                  << "; bunny points=" << bunny.Positions().size() << "; far winding=" << beforeWinding << '\n';
+                  << "; bunny points=" << bunny.Positions().size() << "; far dipole potential=" << beforePotential << '\n';
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
