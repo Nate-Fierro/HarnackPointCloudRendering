@@ -1,0 +1,6 @@
+/build*/
+/out/
+/.vs/
+/README.md
+/data/downloads/
+__pycache__/

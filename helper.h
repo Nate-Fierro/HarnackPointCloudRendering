@@ -4,9 +4,13 @@
 #undef max
 
 #include <iostream>
+#include <algorithm>
 #include <vector>
 #include <limits>
 #include <cmath>
+#include <cstdint>
+#include <functional>
+#include <string>
 
 #include <cyVector.h>
 #include <cyMatrix.h>
@@ -260,7 +264,7 @@ inline Vec3f projectToPlane(const Vec3f& v, const Vec3f& n) {
 }
 
 inline Vec2f projectToLocalPlane(const Vec3f& p, const Vec3f& n) {
-	uint component = abs(n.y) < 0.9f ? 1 : 0;
+	uint component = std::abs(n.y) < 0.9f ? 1 : 0;
 	Vec3f uBasis(0.0f);
 	uBasis[component] = 1.0f;
 

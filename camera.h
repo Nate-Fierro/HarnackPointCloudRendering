@@ -16,14 +16,14 @@ public:
 	virtual void directions(Vec3f& f, Vec3f& u, Vec3f& r) const {
 		f = forward();
 
-		r = WORLD_Y.Cross(f);
+		r = f.Cross(WORLD_Y);
 		r.Normalize();
 
 		u = r.Cross(f);
 		u.Normalize();
 	}
 
-	virtual Vec3f right() const { Vec3f r = WORLD_Y.Cross(forward()); r.Normalize(); return r; }
+	virtual Vec3f right() const { Vec3f r = forward().Cross(WORLD_Y); r.Normalize(); return r; }
 	virtual Vec3f up() const { Vec3f f, u, r; directions(f, u, r); return u; }
 
 	virtual void mouseDrag(const Vec2f& drag) = 0;
@@ -54,8 +54,9 @@ public:
 
 		float radius = cartesian.Length();
 
-		spherical.x = radiansToDegrees(std::acos(pos.x / radius));
-		spherical.y = radiansToDegrees(std::acos(pos.y / radius));
+		if (radius <= 0.0f) { setSphericalPosition(Vec3f(0.0f, 90.0f, 3.0f)); return; }
+		spherical.x = radiansToDegrees(std::atan2(-cartesian.z, cartesian.x));
+		spherical.y = radiansToDegrees(std::acos(std::clamp(cartesian.y / radius, -1.0f, 1.0f)));
 		spherical.z = radius;
 	}
 
